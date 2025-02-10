@@ -74,6 +74,8 @@ y_pred = np.argmax(model.predict(X_test), axis=1)
 # Weighted Average >> ค่าเฉลี่ยแบบ ถ่วงน้ำหนักตามขนาดคลาส
 print(classification_report(y_test, y_pred, target_names=class_names))
 
+'''
+
 # แสดง Confusion Matrix
 # เพื่อทดสอบว่าโมเดลสามารถใช้งานได้จริงแค่ไหน โดยแปลงค่าผลลัพธ์กลับเป็นหมวดหมู่ (Good, Moderate, Poor, Hazardous)
 plt.figure(figsize=(6, 4))
@@ -83,7 +85,11 @@ plt.ylabel('Actual')
 plt.title('Confusion Matrix')
 plt.show()
 
+'''
+
 # Plot Decision Boundary (ใช้ PCA ลดมิติ)
+pc1_label = "Principal Component 1 (PC1)"
+pc2_label = "Principal Component 2 (PC2)"
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_test)
 xx, yy = np.meshgrid(np.linspace(X_pca[:, 0].min(), X_pca[:, 0].max(), 100),
@@ -93,9 +99,14 @@ Z = np.argmax(Z, axis=1)
 Z = Z.reshape(xx.shape)
 plt.contourf(xx, yy, Z, alpha=0.3)
 sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=[class_names[i] for i in y_test], palette='Set1')
+plt.xlabel(pc1_label)
+plt.ylabel(pc2_label)
 plt.title("Decision Boundary")
 plt.show()
+print(pd.DataFrame(pca.components_, columns=data.drop(columns=['Air Quality']).columns, index=['PC1', 'PC2']))
 
+
+'''
 # เช็ค Overfitting หรือ Underfitting
 # Accuracy ระหว่าง Train กับ Test
 # Overfitting >> Train Accuracy สูง แต่ Test Accuracy ต่ำมาก 
@@ -123,8 +134,10 @@ plt.show()
 # Feature Importance using SHAP
 # ใช้โมเดลที่ฝึกแล้วมาสร้าง Explainer
 explainer = shap.Explainer(model, X_train)
+
 # ดูว่าแต่ละ Feature มีผลต่อการพยากรณ์มากแค่ไหน
 shap_values = explainer(X_test)
+
 # Plot กราฟผลรวม
 # สีแดง: ดันค่าพยากรณ์ให้สูง
 # สีฟ้า: ลดค่าพยากรณ์
@@ -148,3 +161,57 @@ new_data_scaled = scaler.transform(new_data)
 # ทำนายค่า Air Quality
 prediction = np.argmax(model.predict(new_data_scaled), axis=1)
 predicted_label = class_names[prediction[0]]  # แปลงกลับเป็นชื่อคลาส
+
+'''
+
+# คำถาม ?
+# 1. ทำไมต้องเลือก ReLU แล้วถ้าเกิดได้ค่าติดลบต้องทำยังไง แก้ยังไง
+# Ans: ให้ค่า Gradient เป็นค่าติดลบเล็ก ๆ แทนศูนย์ เช่น 
+#   - Leaky ReLU f(x)=max(αx,x)
+#   - Parametric ReLU (PReLU) คล้าย Leaky ReLU แต่ให้ α เรียนรู้ค่าเองจากข้อมูล
+# =================================================================================================
+# 2. Decision Boundary ในโค้ด แกน x และ แกน y คืออะไร?
+# Ans: ใช้ PCA มาลดมิติ โดยคิดคำนวณจากทุก Features เลยทำให้แกน X และ Y เป็น
+#
+# xx (แกน X) → PC1 ได้ค่ามาจากการรวมกันของฟีเจอร์ทั้งหมด (Temperature,Humidity,PM2.5,PM10,NO2,SO2,CO,Proximity_to_Industrial_Areas,Population_Density)
+# เป็นทิศทางที่ข้อมูลมีความกระจายมากที่สุด
+# yy (แกน Y) → PC2 ก็เป็นการรวมกันอีกแบบของฟีเจอร์ทั้งหมด (ได้จากนำค่าของฟีเจอร์ทั้งหมดมาคำนวณ)
+# ใช้อธิบายความแตกต่างที่เหลืออยู่
+#
+# คำนวณ PCA
+# 1. ทำ Standardization (ทำให้ค่าเฉลี่ยเป็น 0 และสเกลเป็น 1)
+# 2. จาก Covariance Matrix → หา Eigenvalues, Eigenvectors
+# 3. Eigenvectors คือค่าที่กำหนดว่าแต่ละ Feature มีผลต่อ PC1, PC2 แค่ไหน
+# 4. เราเลือก PC1, PC2 ตาม Explained Variance
+# 5. ค่าในตาราง บอกว่าแต่ละ Feature มีอิทธิพลต่อ PC1, PC2 มากแค่ไหน
+# จาก code ที่ได้
+# PC1 = มลพิษโดยรวม, PC2 = ความเข้มข้นของ PM2.5/PM10
+# =================================================================================================
+# 3. SHAP ทำงานยังไง? SHAP values คืออะไร?
+# Ans: 
+#   1. ใช้ SHAP Explainer กับโมเดลที่ Train แล้ว
+#   2. คำนวณค่า SHAP values
+#       เปรียบเทียบโมเดลที่ มี และ ไม่มี Feature นั้น ๆ
+#   คำนวณว่า Feature แต่ละตัวมีผลต่อค่าพยากรณ์ของโมเดลแค่ไหน
+#   3. Summary Plot แสดงผลกระทบของแต่ละ Feature
+#       แกน Y >> Feature ต่าง ๆ ที่ใช้ในโมเดล
+#       แกน X >> SHAP Value ที่แสดงผลกระทบของ Feature ต่อโมเดล
+#       จุด (Dot) >> ค่าของแต่ละตัวอย่างข้อมูล (Instance) ในชุดข้อมูล
+#       แดง (High Value) = ค่าของ Feature สูง
+#       ฟ้า (Low Value) = ค่าของ Feature ต่ำ
+#       จุดที่กระจายไปทางขวา (SHAP Value บวก) แสดงว่า Feature นั้นมีแนวโน้มเพิ่มค่าพยากรณ์
+#       จุดที่กระจายไปทางซ้าย (SHAP Value ลบ) แสดงว่า Feature นั้นมีแนวโน้มลดค่าพยากรณ์
+#       ถ้าสีแดงอยู่ทางขวา >> ถ้าค่าของ Feature สูง จะเพิ่มค่าพยากรณ์
+#       ถ้าสีฟ้าอยู่ทางขวา >> ถ้าค่าของ Feature ต่ำ จะเพิ่มค่าพยากรณ์แทน
+#
+#   SHAP Value คำนวณจาก Shapley Value (แนวคิดจากทฤษฎีเกม) โดยใช้หลักการว่า
+#   "ถ้าตัด Feature ออกไป ผลลัพธ์โมเดลจะเปลี่ยนไปแค่ไหน?"
+#   ใช้สูตรคำนวณ SHAP Value
+#   1. รันโมเดลโดยใช้ทุก Feature → ได้ค่าพยากรณ์ f(F) 
+#   2. เลือก Subset ของ Feature แบบสุ่ม เช่น S={PM2.5,CO}
+#   3. รันโมเดลใหม่เฉพาะ Feature ใน S
+#   4. เพิ่ม Feature ใหม่ i เข้าไปใน S แล้วรันโมเดลอีกครั้ง >> ได้ค่าพยากรณ์ f(S∪{i})
+#   5. คำนวณผลกระทบของ Feature นั้น i โดยใช้ f(S∪{i})−f(S)
+#   6. ทำซ้ำกับทุก Subset ที่เป็นไปได้ และถ่วงน้ำหนักตามสูตร
+#   7. สรุปเป็นค่าเฉลี่ยของผลกระทบ >> ได้ค่า SHAP Value ของ Feature นั้น
+# =================================================================================================
